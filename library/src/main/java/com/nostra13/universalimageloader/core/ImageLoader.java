@@ -105,6 +105,8 @@ public class ImageLoader {
 	/**
 	 * Returns <b>true</b> - if ImageLoader {@linkplain #init(ImageLoaderConfiguration) is initialized with
 	 * configuration}; <b>false</b> - otherwise
+	 *
+	 * 
 	 */
 	public boolean isInited() {
 		return configuration != null;
