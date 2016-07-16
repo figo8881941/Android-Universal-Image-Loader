@@ -117,7 +117,9 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 
 	@Override
 	public void run() {
+		//检查是否停止加载
 		if (waitIfPaused()) return;
+		//检查是否要延迟特定时间加载
 		if (delayIfNeed()) return;
 
 		ReentrantLock loadFromUriLock = imageLoadingInfo.loadFromUriLock;
@@ -126,19 +128,27 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 			L.d(LOG_WAITING_FOR_IMAGE_LOADED, memoryCacheKey);
 		}
 
+		//uri锁
 		loadFromUriLock.lock();
 		Bitmap bmp;
 		try {
+
+			//检查任务是否还有效，如果已经失效，会抛出异常
 			checkTaskNotActual();
 
+			//再次尝试从内存里面取
+			//同一个uri，可能会产生多个任务。上面加了uri锁，所以，到这里，有可能别的任务已经加载了该图片，要再次检查。
 			bmp = configuration.memoryCache.get(memoryCacheKey);
 			if (bmp == null || bmp.isRecycled()) {
+				//如果内存里面真的没有，尝试从外存和网络加载图片
 				bmp = tryLoadBitmap();
 				if (bmp == null) return; // listener callback already was fired
 
+				//检查任务是否还有效，如果已经失效，会抛出异常
 				checkTaskNotActual();
 				checkTaskInterrupted();
 
+				//缓存到内存前，进行图片处理
 				if (options.shouldPreProcess()) {
 					L.d(LOG_PREPROCESS_IMAGE, memoryCacheKey);
 					bmp = options.getPreProcessor().process(bmp);
@@ -147,6 +157,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 					}
 				}
 
+				//缓存到内存
 				if (bmp != null && options.isCacheInMemory()) {
 					L.d(LOG_CACHE_IMAGE_IN_MEMORY, memoryCacheKey);
 					configuration.memoryCache.put(memoryCacheKey, bmp);
@@ -156,6 +167,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 				L.d(LOG_GET_IMAGE_FROM_MEMORY_CACHE_AFTER_WAITING, memoryCacheKey);
 			}
 
+			//在显示之前，进行图片处理
 			if (bmp != null && options.shouldPostProcess()) {
 				L.d(LOG_POSTPROCESS_IMAGE, memoryCacheKey);
 				bmp = options.getPostProcessor().process(bmp);
@@ -163,15 +175,18 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 					L.e(ERROR_POST_PROCESSOR_NULL, memoryCacheKey);
 				}
 			}
+			//检查任务是否还有效，如果已经失效，会抛出异常
 			checkTaskNotActual();
 			checkTaskInterrupted();
 		} catch (TaskCancelledException e) {
+			//任务失效，抛出异常，这里进行回调通知
 			fireCancelEvent();
 			return;
 		} finally {
 			loadFromUriLock.unlock();
 		}
 
+		//构建展示任务，进行展示
 		DisplayBitmapTask displayBitmapTask = new DisplayBitmapTask(bmp, imageLoadingInfo, engine, loadedFrom);
 		runTask(displayBitmapTask, syncLoading, handler, engine);
 	}
@@ -215,13 +230,16 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 		Bitmap bitmap = null;
 		try {
 			File imageFile = configuration.diskCache.get(uri);
+			//先从外存里面取
 			if (imageFile != null && imageFile.exists() && imageFile.length() > 0) {
 				L.d(LOG_LOAD_IMAGE_FROM_DISK_CACHE, memoryCacheKey);
 				loadedFrom = LoadedFrom.DISC_CACHE;
 
+				//检查任务是否还有效，如果已经失效，会抛出异常
 				checkTaskNotActual();
 				bitmap = decodeImage(Scheme.FILE.wrap(imageFile.getAbsolutePath()));
 			}
+			//外存没有，再从网络取
 			if (bitmap == null || bitmap.getWidth() <= 0 || bitmap.getHeight() <= 0) {
 				L.d(LOG_LOAD_IMAGE_FROM_NETWORK, memoryCacheKey);
 				loadedFrom = LoadedFrom.NETWORK;
@@ -233,7 +251,7 @@ final class LoadAndDisplayImageTask implements Runnable, IoUtils.CopyListener {
 						imageUriForDecoding = Scheme.FILE.wrap(imageFile.getAbsolutePath());
 					}
 				}
-
+				//检查任务是否还有效，如果已经失效，会抛出异常
 				checkTaskNotActual();
 				bitmap = decodeImage(imageUriForDecoding);
 

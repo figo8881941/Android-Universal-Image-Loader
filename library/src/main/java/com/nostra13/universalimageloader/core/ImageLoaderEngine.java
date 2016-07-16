@@ -41,6 +41,7 @@ class ImageLoaderEngine {
 
 	final ImageLoaderConfiguration configuration;
 
+	//这里根据不同的使用场景，开了三个不同的线程池
 	private Executor taskExecutor;
 	private Executor taskExecutorForCachedImages;
 	private Executor taskDistributor;

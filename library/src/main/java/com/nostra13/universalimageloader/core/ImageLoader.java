@@ -245,6 +245,7 @@ public class ImageLoader {
 		}
 
 		if (TextUtils.isEmpty(uri)) {
+			//如果uri为空
 			engine.cancelDisplayTaskFor(imageAware);
 			listener.onLoadingStarted(uri, imageAware.getWrappedView());
 			if (options.shouldShowImageForEmptyUri()) {
@@ -259,30 +260,41 @@ public class ImageLoader {
 		if (targetSize == null) {
 			targetSize = ImageSizeUtils.defineTargetSizeForView(imageAware, configuration.getMaxImageSize());
 		}
+		//这里生成memoryCacheKey，格式为[imageUri]_[width]x[height]
+		//就是相同的uri的图片，size不同，cachekey不同
 		String memoryCacheKey = MemoryCacheUtils.generateKey(uri, targetSize);
 		engine.prepareDisplayTaskFor(imageAware, memoryCacheKey);
 
 		listener.onLoadingStarted(uri, imageAware.getWrappedView());
 
+		//先从内存里面取图片
 		Bitmap bmp = configuration.memoryCache.get(memoryCacheKey);
 		if (bmp != null && !bmp.isRecycled()) {
+			//如果内存里面有图片
 			L.d(LOG_LOAD_IMAGE_FROM_MEMORY_CACHE, memoryCacheKey);
 
 			if (options.shouldPostProcess()) {
+				//内存图片要进行展示前的处理
 				ImageLoadingInfo imageLoadingInfo = new ImageLoadingInfo(uri, imageAware, targetSize, memoryCacheKey,
 						options, listener, progressListener, engine.getLockForUri(uri));
+				//构建图片处理与展示的任务
 				ProcessAndDisplayImageTask displayTask = new ProcessAndDisplayImageTask(engine, bmp, imageLoadingInfo,
 						defineHandler(options));
 				if (options.isSyncLoading()) {
+					//同步执行
 					displayTask.run();
 				} else {
+					//异步执行
 					engine.submit(displayTask);
 				}
 			} else {
+				//不需要处理，直接展示
 				options.getDisplayer().display(bmp, imageAware, LoadedFrom.MEMORY_CACHE);
 				listener.onLoadingComplete(uri, imageAware.getWrappedView(), bmp);
 			}
 		} else {
+			//如果内存里面没有图片
+			//设置loading图片或者进行重置
 			if (options.shouldShowImageOnLoading()) {
 				imageAware.setImageDrawable(options.getImageOnLoading(configuration.resources));
 			} else if (options.isResetViewBeforeLoading()) {
@@ -291,11 +303,14 @@ public class ImageLoader {
 
 			ImageLoadingInfo imageLoadingInfo = new ImageLoadingInfo(uri, imageAware, targetSize, memoryCacheKey,
 					options, listener, progressListener, engine.getLockForUri(uri));
+			//构建图片加载与展示的任务
 			LoadAndDisplayImageTask displayTask = new LoadAndDisplayImageTask(engine, imageLoadingInfo,
 					defineHandler(options));
 			if (options.isSyncLoading()) {
+				//同步执行
 				displayTask.run();
 			} else {
+				//异步执行
 				engine.submit(displayTask);
 			}
 		}
